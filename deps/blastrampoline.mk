@@ -2,8 +2,8 @@
 
 ifneq ($(USE_BINARYBUILDER_BLASTRAMPOLINE),1)
 
-BLASTRAMPOLINE_GIT_URL := git://github.com/staticfloat/libblastrampoline.git
-BLASTRAMPOLINE_TAR_URL = https://api.github.com/repos/staticfloat/libblastrampoline/tarball/$1
+BLASTRAMPOLINE_GIT_URL := https://github.com/JuliaLinearAlgebra/libblastrampoline.git
+BLASTRAMPOLINE_TAR_URL = https://api.github.com/repos/JuliaLinearAlgebra/libblastrampoline/tarball/$1
 $(eval $(call git-external,blastrampoline,BLASTRAMPOLINE,,,$(BUILDDIR)))
 
 $(BUILDDIR)/$(BLASTRAMPOLINE_SRC_DIR)/build-configured: $(BUILDDIR)/$(BLASTRAMPOLINE_SRC_DIR)/source-extracted
@@ -15,7 +15,7 @@ $(BUILDDIR)/$(BLASTRAMPOLINE_SRC_DIR)/build-compiled: $(BUILDDIR)/$(BLASTRAMPOLI
 	echo 1 > $@
 
 define BLASTRAMPOLINE_INSTALL
-	$(MAKE) -C $(BUILDDIR)/$(BLASTRAMPOLINE_SRC_DIR)/src $(MAKE_COMMON) install
+	$(MAKE) -C $(BUILDDIR)/$(BLASTRAMPOLINE_SRC_DIR)/src $(MAKE_COMMON) install DESTDIR="$2"
 endef
 $(eval $(call staged-install, \
 	blastrampoline,$(BLASTRAMPOLINE_SRC_DIR), \

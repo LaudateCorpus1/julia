@@ -70,7 +70,7 @@ ix[(begin+1):end]  # works for generalized indexes
 ```
 """
 function axes(A::AbstractArray{T,N}, d) where {T,N}
-    @_inline_meta
+    @inline
     d::Integer <= N ? axes(A)[d] : OneTo(1)
 end
 
@@ -91,7 +91,7 @@ julia> axes(A)
 ```
 """
 function axes(A)
-    @_inline_meta
+    @inline
     map(oneto, size(A))
 end
 
@@ -101,23 +101,32 @@ end
 
 Return `true` if the indices of `A` start with something other than 1 along any axis.
 If multiple arguments are passed, equivalent to `has_offset_axes(A) | has_offset_axes(B) | ...`.
+
+See also [`require_one_based_indexing`](@ref).
 """
 has_offset_axes(A) = _tuple_any(x->Int(first(x))::Int != 1, axes(A))
 has_offset_axes(A::AbstractVector) = Int(firstindex(A))::Int != 1 # improve performance of a common case (ranges)
 has_offset_axes(A...) = _tuple_any(has_offset_axes, A)
 has_offset_axes(::Colon) = false
 
+"""
+    require_one_based_indexing(A::AbstractArray)
+    require_one_based_indexing(A,B...)
+
+Throw an `ArgumentError` if the indices of any argument start with something other than `1` along any axis.
+See also [`has_offset_axes`](@ref).
+
+!!! compat "Julia 1.2"
+     This function requires at least Julia 1.2.
+"""
 require_one_based_indexing(A...) = !has_offset_axes(A...) || throw(ArgumentError("offset arrays are not supported but got an array with index other than 1"))
 
 # Performance optimization: get rid of a branch on `d` in `axes(A, d)`
 # for d=1. 1d arrays are heavily used, and the first dimension comes up
 # in other applications.
 axes1(A::AbstractArray{<:Any,0}) = OneTo(1)
-axes1(A::AbstractArray) = (@_inline_meta; axes(A)[1])
+axes1(A::AbstractArray) = (@inline; axes(A)[1])
 axes1(iter) = oneto(length(iter))
-
-unsafe_indices(A) = axes(A)
-unsafe_indices(r::AbstractRange) = (oneto(unsafe_length(r)),) # Ranges use checked_sub for size
 
 """
     keys(a::AbstractArray)
@@ -215,6 +224,12 @@ eltype(::Type{<:AbstractArray{E}}) where {E} = @isdefined(E) ? E : Any
 Compute the memory stride in bytes between consecutive elements of `eltype`
 stored inside the given `type`, if the array elements are stored densely with a
 uniform linear stride.
+
+# Examples
+```jldoctest
+julia> Base.elsize(rand(Float32, 10))
+4
+```
 """
 elsize(A::AbstractArray) = elsize(typeof(A))
 
@@ -273,13 +288,13 @@ julia> length([1 2; 3 4])
 4
 ```
 """
-length(t::AbstractArray) = (@_inline_meta; prod(size(t)))
+length(t::AbstractArray) = (@inline; prod(size(t)))
 
 # `eachindex` is mostly an optimization of `keys`
 eachindex(itrs...) = keys(itrs...)
 
 # eachindex iterates over all indices. IndexCartesian definitions are later.
-eachindex(A::AbstractVector) = (@_inline_meta(); axes1(A))
+eachindex(A::AbstractVector) = (@inline(); axes1(A))
 
 
 @noinline function throw_eachindex_mismatch_indices(::IndexLinear, inds...)
@@ -303,7 +318,7 @@ If you supply more than one `AbstractArray` argument, `eachindex` will create an
 iterable object that is fast for all arguments (a [`UnitRange`](@ref)
 if all inputs have fast linear indexing, a [`CartesianIndices`](@ref)
 otherwise).
-If the arrays have different sizes and/or dimensionalities, a DimensionMismatch exception
+If the arrays have different sizes and/or dimensionalities, a `DimensionMismatch` exception
 will be thrown.
 # Examples
 ```jldoctest
@@ -324,27 +339,27 @@ CartesianIndex(1, 1)
 CartesianIndex(2, 1)
 ```
 """
-eachindex(A::AbstractArray) = (@_inline_meta(); eachindex(IndexStyle(A), A))
+eachindex(A::AbstractArray) = (@inline(); eachindex(IndexStyle(A), A))
 
 function eachindex(A::AbstractArray, B::AbstractArray)
-    @_inline_meta
+    @inline
     eachindex(IndexStyle(A,B), A, B)
 end
 function eachindex(A::AbstractArray, B::AbstractArray...)
-    @_inline_meta
+    @inline
     eachindex(IndexStyle(A,B...), A, B...)
 end
-eachindex(::IndexLinear, A::AbstractArray) = (@_inline_meta; oneto(length(A)))
-eachindex(::IndexLinear, A::AbstractVector) = (@_inline_meta; axes1(A))
+eachindex(::IndexLinear, A::AbstractArray) = (@inline; oneto(length(A)))
+eachindex(::IndexLinear, A::AbstractVector) = (@inline; axes1(A))
 function eachindex(::IndexLinear, A::AbstractArray, B::AbstractArray...)
-    @_inline_meta
+    @inline
     indsA = eachindex(IndexLinear(), A)
     _all_match_first(X->eachindex(IndexLinear(), X), indsA, B...) ||
         throw_eachindex_mismatch_indices(IndexLinear(), eachindex(A), eachindex.(B)...)
     indsA
 end
 function _all_match_first(f::F, inds, A, B...) where F<:Function
-    @_inline_meta
+    @inline
     (inds == f(A)) & _all_match_first(f, inds, B...)
 end
 _all_match_first(f::F, inds) where F<:Function = true
@@ -372,8 +387,8 @@ julia> lastindex(rand(3,4,5), 2)
 4
 ```
 """
-lastindex(a::AbstractArray) = (@_inline_meta; last(eachindex(IndexLinear(), a)))
-lastindex(a, d) = (@_inline_meta; last(axes(a, d)))
+lastindex(a::AbstractArray) = (@inline; last(eachindex(IndexLinear(), a)))
+lastindex(a, d) = (@inline; last(axes(a, d)))
 
 """
     firstindex(collection) -> Integer
@@ -395,8 +410,8 @@ julia> firstindex(rand(3,4,5), 2)
 1
 ```
 """
-firstindex(a::AbstractArray) = (@_inline_meta; first(eachindex(IndexLinear(), a)))
-firstindex(a, d) = (@_inline_meta; first(axes(a, d)))
+firstindex(a::AbstractArray) = (@inline; first(eachindex(IndexLinear(), a)))
+firstindex(a, d) = (@inline; first(axes(a, d)))
 
 first(a::AbstractArray) = a[first(eachindex(a))]
 
@@ -543,7 +558,13 @@ julia> stride(A,3)
 function stride(A::AbstractArray, k::Integer)
     st = strides(A)
     k ≤ ndims(A) && return st[k]
-    return sum(st .* size(A))
+    ndims(A) == 0 && return 1
+    sz = size(A)
+    s = st[1] * sz[1]
+    for i in 2:ndims(A)
+        s += st[i] * sz[i]
+    end
+    return s
 end
 
 @inline size_to_strides(s, d, sz...) = (s, size_to_strides(s * d, sz...)...)
@@ -580,14 +601,14 @@ end
 function trailingsize(inds::Indices, n)
     s = 1
     for i=n:length(inds)
-        s *= unsafe_length(inds[i])
+        s *= length(inds[i])
     end
     return s
 end
 # This version is type-stable even if inds is heterogeneous
 function trailingsize(inds::Indices)
-    @_inline_meta
-    prod(map(unsafe_length, inds))
+    @inline
+    prod(map(length, inds))
 end
 
 ## Bounds checking ##
@@ -634,18 +655,18 @@ false
 ```
 """
 function checkbounds(::Type{Bool}, A::AbstractArray, I...)
-    @_inline_meta
+    @inline
     checkbounds_indices(Bool, axes(A), I)
 end
 
 # Linear indexing is explicitly allowed when there is only one (non-cartesian) index
 function checkbounds(::Type{Bool}, A::AbstractArray, i)
-    @_inline_meta
+    @inline
     checkindex(Bool, eachindex(IndexLinear(), A), i)
 end
 # As a special extension, allow using logical arrays that match the source array exactly
 function checkbounds(::Type{Bool}, A::AbstractArray{<:Any,N}, I::AbstractArray{Bool,N}) where N
-    @_inline_meta
+    @inline
     axes(A) == axes(I)
 end
 
@@ -655,7 +676,7 @@ end
 Throw an error if the specified indices `I` are not in bounds for the given array `A`.
 """
 function checkbounds(A::AbstractArray, I...)
-    @_inline_meta
+    @inline
     checkbounds(Bool, A, I...) || throw_boundserror(A, I)
     nothing
 end
@@ -681,17 +702,17 @@ of `IA`.
 See also [`checkbounds`](@ref).
 """
 function checkbounds_indices(::Type{Bool}, IA::Tuple, I::Tuple)
-    @_inline_meta
+    @inline
     checkindex(Bool, IA[1], I[1])::Bool & checkbounds_indices(Bool, tail(IA), tail(I))
 end
 function checkbounds_indices(::Type{Bool}, ::Tuple{}, I::Tuple)
-    @_inline_meta
+    @inline
     checkindex(Bool, OneTo(1), I[1])::Bool & checkbounds_indices(Bool, (), tail(I))
 end
-checkbounds_indices(::Type{Bool}, IA::Tuple, ::Tuple{}) = (@_inline_meta; all(x->unsafe_length(x)==1, IA))
+checkbounds_indices(::Type{Bool}, IA::Tuple, ::Tuple{}) = (@inline; all(x->length(x)==1, IA))
 checkbounds_indices(::Type{Bool}, ::Tuple{}, ::Tuple{}) = true
 
-throw_boundserror(A, I) = (@_noinline_meta; throw(BoundsError(A, I)))
+throw_boundserror(A, I) = (@noinline; throw(BoundsError(A, I)))
 
 # check along a single dimension
 """
@@ -725,7 +746,7 @@ end
 checkindex(::Type{Bool}, indx::AbstractUnitRange, I::AbstractVector{Bool}) = indx == axes1(I)
 checkindex(::Type{Bool}, indx::AbstractUnitRange, I::AbstractArray{Bool}) = false
 function checkindex(::Type{Bool}, inds::AbstractUnitRange, I::AbstractArray)
-    @_inline_meta
+    @inline
     b = true
     for i in I
         b &= checkindex(Bool, inds, i)
@@ -755,7 +776,7 @@ neither mutable nor support 2 dimensions:
 
 ```julia-repl
 julia> similar(1:10, 1, 4)
-1×4 Array{Int64,2}:
+1×4 Matrix{Int64}:
  4419743872  4374413872  4419743888  0
 ```
 
@@ -774,7 +795,7 @@ different element type it will create a regular `Array` instead:
 
 ```julia-repl
 julia> similar(falses(10), Float64, 2, 4)
-2×4 Array{Float64,2}:
+2×4 Matrix{Float64}:
  2.18425e-314  2.18425e-314  2.18425e-314  2.18425e-314
  2.18425e-314  2.18425e-314  2.18425e-314  2.18425e-314
 ```
@@ -887,6 +908,10 @@ end
 
 ## from general iterable to any array
 
+# This is `@Experimental.max_methods 1 function copyto! end`, which is not
+# defined at this point in bootstrap.
+typeof(function copyto! end).name.max_methods = UInt8(1)
+
 function copyto!(dest::AbstractArray, src)
     destiter = eachindex(dest)
     y = iterate(destiter)
@@ -901,9 +926,17 @@ end
 
 function copyto!(dest::AbstractArray, dstart::Integer, src)
     i = Int(dstart)
-    for x in src
-        dest[i] = x
-        i += 1
+    if haslength(src) && length(dest) > 0
+        @boundscheck checkbounds(dest, i:(i + length(src) - 1))
+        for x in src
+            @inbounds dest[i] = x
+            i += 1
+        end
+    else
+        for x in src
+            dest[i] = x
+            i += 1
+        end
     end
     return dest
 end
@@ -911,19 +944,21 @@ end
 # copy from an some iterable object into an AbstractArray
 function copyto!(dest::AbstractArray, dstart::Integer, src, sstart::Integer)
     if (sstart < 1)
-        throw(ArgumentError(string("source start offset (",sstart,") is < 1")))
+        throw(ArgumentError(LazyString("source start offset (",sstart,") is < 1")))
     end
     y = iterate(src)
     for j = 1:(sstart-1)
         if y === nothing
-            throw(ArgumentError(string("source has fewer elements than required, ",
-                                       "expected at least ",sstart,", got ",j-1)))
+            throw(ArgumentError(LazyString(
+                "source has fewer elements than required, ",
+                "expected at least ", sstart,", got ", j-1)))
         end
         y = iterate(src, y[2])
     end
     if y === nothing
-        throw(ArgumentError(string("source has fewer elements than required, ",
-                                   "expected at least ",sstart,", got ",sstart-1)))
+        throw(ArgumentError(LazyString(
+            "source has fewer elements than required, ",
+            "expected at least ",sstart," got ", sstart-1)))
     end
     i = Int(dstart)
     while y !== nothing
@@ -937,19 +972,22 @@ end
 
 # this method must be separate from the above since src might not have a length
 function copyto!(dest::AbstractArray, dstart::Integer, src, sstart::Integer, n::Integer)
-    n < 0 && throw(ArgumentError(string("tried to copy n=", n, " elements, but n should be nonnegative")))
+    n < 0 && throw(ArgumentError(LazyString("tried to copy n=",n,
+        ", elements, but n should be nonnegative")))
     n == 0 && return dest
     dmax = dstart + n - 1
     inds = LinearIndices(dest)
     if (dstart ∉ inds || dmax ∉ inds) | (sstart < 1)
-        sstart < 1 && throw(ArgumentError(string("source start offset (",sstart,") is < 1")))
+        sstart < 1 && throw(ArgumentError(LazyString("source start offset (",
+            sstart,") is < 1")))
         throw(BoundsError(dest, dstart:dmax))
     end
     y = iterate(src)
     for j = 1:(sstart-1)
         if y === nothing
-            throw(ArgumentError(string("source has fewer elements than required, ",
-                                       "expected at least ",sstart,", got ",j-1)))
+            throw(ArgumentError(LazyString(
+                "source has fewer elements than required, ",
+                "expected at least ",sstart,", got ",j-1)))
         end
         y = iterate(src, y[2])
     end
@@ -1038,7 +1076,7 @@ function copyto_unaliased!(deststyle::IndexStyle, dest::AbstractArray, srcstyle:
             # Dual-iterator implementation
             ret = iterate(iterdest)
             @inbounds for a in src
-                idx, state = ret
+                idx, state = ret::NTuple{2,Any}
                 dest[idx] = a
                 ret = iterate(iterdest, state)
             end
@@ -1061,7 +1099,8 @@ function copyto!(dest::AbstractArray, dstart::Integer,
                src::AbstractArray, sstart::Integer,
                n::Integer)
     n == 0 && return dest
-    n < 0 && throw(ArgumentError(string("tried to copy n=", n, " elements, but n should be nonnegative")))
+    n < 0 && throw(ArgumentError(LazyString("tried to copy n=",
+        n," elements, but n should be nonnegative")))
     destinds, srcinds = LinearIndices(dest), LinearIndices(src)
     (checkbounds(Bool, destinds, dstart) && checkbounds(Bool, destinds, dstart+n-1)) || throw(BoundsError(dest, dstart:dstart+n-1))
     (checkbounds(Bool, srcinds, sstart)  && checkbounds(Bool, srcinds, sstart+n-1))  || throw(BoundsError(src,  sstart:sstart+n-1))
@@ -1079,12 +1118,12 @@ end
 function copyto!(B::AbstractVecOrMat{R}, ir_dest::AbstractRange{Int}, jr_dest::AbstractRange{Int},
                A::AbstractVecOrMat{S}, ir_src::AbstractRange{Int}, jr_src::AbstractRange{Int}) where {R,S}
     if length(ir_dest) != length(ir_src)
-        throw(ArgumentError(string("source and destination must have same size (got ",
-                                   length(ir_src)," and ",length(ir_dest),")")))
+        throw(ArgumentError(LazyString("source and destination must have same size (got ",
+            length(ir_src)," and ",length(ir_dest),")")))
     end
     if length(jr_dest) != length(jr_src)
-        throw(ArgumentError(string("source and destination must have same size (got ",
-                                   length(jr_src)," and ",length(jr_dest),")")))
+        throw(ArgumentError(LazyString("source and destination must have same size (got ",
+            length(jr_src)," and ",length(jr_dest),")")))
     end
     @boundscheck checkbounds(B, ir_dest, jr_dest)
     @boundscheck checkbounds(A, ir_src, jr_src)
@@ -1133,7 +1172,7 @@ function copymutable(a::AbstractArray)
 end
 copymutable(itr) = collect(itr)
 
-zero(x::AbstractArray{T}) where {T} = fill!(similar(x), zero(T))
+zero(x::AbstractArray{T}) where {T} = fill!(similar(x, typeof(zero(T))), zero(T))
 
 ## iteration support for arrays by iterating over `eachindex` in the array ##
 # Allows fast iteration by default for both IndexLinear and IndexCartesian arrays
@@ -1166,7 +1205,7 @@ end
 # convenience in cases that work.
 pointer(x::AbstractArray{T}) where {T} = unsafe_convert(Ptr{T}, x)
 function pointer(x::AbstractArray{T}, i::Integer) where T
-    @_inline_meta
+    @inline
     unsafe_convert(Ptr{T}, x) + Int(_memory_offset(x, i))::Int
 end
 
@@ -1224,15 +1263,21 @@ end
 @propagate_inbounds getindex(A::Array, i1::Integer, I::Integer...) = A[to_indices(A, (i1, I...))...]
 
 function unsafe_getindex(A::AbstractArray, I...)
-    @_inline_meta
+    @inline
     @inbounds r = getindex(A, I...)
     r
 end
 
+struct CanonicalIndexError
+    func::String
+    type::Any
+    CanonicalIndexError(func::String, @nospecialize(type)) = new(func, type)
+end
+
 error_if_canonical_getindex(::IndexLinear, A::AbstractArray, ::Int) =
-    error("getindex not defined for ", typeof(A))
+    throw(CanonicalIndexError("getindex", typeof(A)))
 error_if_canonical_getindex(::IndexCartesian, A::AbstractArray{T,N}, ::Vararg{Int,N}) where {T,N} =
-    error("getindex not defined for ", typeof(A))
+    throw(CanonicalIndexError("getindex", typeof(A)))
 error_if_canonical_getindex(::IndexStyle, ::AbstractArray, ::Any...) = nothing
 
 ## Internal definitions
@@ -1243,7 +1288,7 @@ _getindex(::IndexStyle, A::AbstractArray, I...) =
 _getindex(::IndexLinear, A::AbstractVector, i::Int) = (@_propagate_inbounds_meta; getindex(A, i))  # ambiguity resolution in case packages specialize this (to be avoided if at all possible, but see Interpolations.jl)
 _getindex(::IndexLinear, A::AbstractArray, i::Int) = (@_propagate_inbounds_meta; getindex(A, i))
 function _getindex(::IndexLinear, A::AbstractArray, I::Vararg{Int,M}) where M
-    @_inline_meta
+    @inline
     @boundscheck checkbounds(A, I...) # generally _to_linear_index requires bounds checking
     @inbounds r = getindex(A, _to_linear_index(A, I...))
     r
@@ -1251,11 +1296,11 @@ end
 _to_linear_index(A::AbstractArray, i::Integer) = i
 _to_linear_index(A::AbstractVector, i::Integer, I::Integer...) = i
 _to_linear_index(A::AbstractArray) = first(LinearIndices(A))
-_to_linear_index(A::AbstractArray, I::Integer...) = (@_inline_meta; _sub2ind(A, I...))
+_to_linear_index(A::AbstractArray, I::Integer...) = (@inline; _sub2ind(A, I...))
 
 ## IndexCartesian Scalar indexing: Canonical method is full dimensionality of Ints
 function _getindex(::IndexCartesian, A::AbstractArray, I::Vararg{Int,M}) where M
-    @_inline_meta
+    @inline
     @boundscheck checkbounds(A, I...) # generally _to_subscript_indices requires bounds checking
     @inbounds r = getindex(A, _to_subscript_indices(A, I...)...)
     r
@@ -1264,13 +1309,13 @@ function _getindex(::IndexCartesian, A::AbstractArray{T,N}, I::Vararg{Int, N}) w
     @_propagate_inbounds_meta
     getindex(A, I...)
 end
-_to_subscript_indices(A::AbstractArray, i::Integer) = (@_inline_meta; _unsafe_ind2sub(A, i))
-_to_subscript_indices(A::AbstractArray{T,N}) where {T,N} = (@_inline_meta; fill_to_length((), 1, Val(N)))
+_to_subscript_indices(A::AbstractArray, i::Integer) = (@inline; _unsafe_ind2sub(A, i))
+_to_subscript_indices(A::AbstractArray{T,N}) where {T,N} = (@inline; fill_to_length((), 1, Val(N)))
 _to_subscript_indices(A::AbstractArray{T,0}) where {T} = ()
 _to_subscript_indices(A::AbstractArray{T,0}, i::Integer) where {T} = ()
 _to_subscript_indices(A::AbstractArray{T,0}, I::Integer...) where {T} = ()
 function _to_subscript_indices(A::AbstractArray{T,N}, I::Integer...) where {T,N}
-    @_inline_meta
+    @inline
     J, Jrem = IteratorsMD.split(I, Val(N))
     _to_subscript_indices(A, J, Jrem)
 end
@@ -1278,15 +1323,15 @@ _to_subscript_indices(A::AbstractArray, J::Tuple, Jrem::Tuple{}) =
     __to_subscript_indices(A, axes(A), J, Jrem)
 function __to_subscript_indices(A::AbstractArray,
         ::Tuple{AbstractUnitRange,Vararg{AbstractUnitRange}}, J::Tuple, Jrem::Tuple{})
-    @_inline_meta
+    @inline
     (J..., map(first, tail(_remaining_size(J, axes(A))))...)
 end
 _to_subscript_indices(A, J::Tuple, Jrem::Tuple) = J # already bounds-checked, safe to drop
 _to_subscript_indices(A::AbstractArray{T,N}, I::Vararg{Int,N}) where {T,N} = I
 _remaining_size(::Tuple{Any}, t::Tuple) = t
-_remaining_size(h::Tuple, t::Tuple) = (@_inline_meta; _remaining_size(tail(h), tail(t)))
+_remaining_size(h::Tuple, t::Tuple) = (@inline; _remaining_size(tail(h), tail(t)))
 _unsafe_ind2sub(::Tuple{}, i) = () # _ind2sub may throw(BoundsError()) in this case
-_unsafe_ind2sub(sz, i) = (@_inline_meta; _ind2sub(sz, i))
+_unsafe_ind2sub(sz, i) = (@inline; _ind2sub(sz, i))
 
 ## Setindex! is defined similarly. We first dispatch to an internal _setindex!
 # function that allows dispatch on array storage
@@ -1318,15 +1363,15 @@ function setindex!(A::AbstractArray, v, I...)
     _setindex!(IndexStyle(A), A, v, to_indices(A, I)...)
 end
 function unsafe_setindex!(A::AbstractArray, v, I...)
-    @_inline_meta
+    @inline
     @inbounds r = setindex!(A, v, I...)
     r
 end
 
 error_if_canonical_setindex(::IndexLinear, A::AbstractArray, ::Int) =
-    error("setindex! not defined for ", typeof(A))
+    throw(CanonicalIndexError("setindex!", typeof(A)))
 error_if_canonical_setindex(::IndexCartesian, A::AbstractArray{T,N}, ::Vararg{Int,N}) where {T,N} =
-    error("setindex! not defined for ", typeof(A))
+    throw(CanonicalIndexError("setindex!", typeof(A)))
 error_if_canonical_setindex(::IndexStyle, ::AbstractArray, ::Any...) = nothing
 
 ## Internal definitions
@@ -1336,7 +1381,7 @@ _setindex!(::IndexStyle, A::AbstractArray, v, I...) =
 ## IndexLinear Scalar indexing
 _setindex!(::IndexLinear, A::AbstractArray, v, i::Int) = (@_propagate_inbounds_meta; setindex!(A, v, i))
 function _setindex!(::IndexLinear, A::AbstractArray, v, I::Vararg{Int,M}) where M
-    @_inline_meta
+    @inline
     @boundscheck checkbounds(A, I...)
     @inbounds r = setindex!(A, v, _to_linear_index(A, I...))
     r
@@ -1348,7 +1393,7 @@ function _setindex!(::IndexCartesian, A::AbstractArray{T,N}, v, I::Vararg{Int, N
     setindex!(A, v, I...)
 end
 function _setindex!(::IndexCartesian, A::AbstractArray, v, I::Vararg{Int,M}) where M
-    @_inline_meta
+    @inline
     @boundscheck checkbounds(A, I...)
     @inbounds r = setindex!(A, v, _to_subscript_indices(A, I...)...)
     r
@@ -1415,7 +1460,7 @@ much more common case where aliasing does not occur. By default,
 `Base.unaliascopy(A)`.
 """
 unaliascopy(A::Array) = copy(A)
-unaliascopy(A::AbstractArray)::typeof(A) = (@_noinline_meta; _unaliascopy(A, copy(A)))
+unaliascopy(A::AbstractArray)::typeof(A) = (@noinline; _unaliascopy(A, copy(A)))
 _unaliascopy(A::T, C::T) where {T} = C
 _unaliascopy(A, C) = throw(ArgumentError("""
     an array of type `$(typename(typeof(A)).wrapper)` shares memory with another argument
@@ -1691,21 +1736,16 @@ end
 _cs(d, a, b) = (a == b ? a : throw(DimensionMismatch(
     "mismatch in dimension $d (expected $a got $b)")))
 
-function dims2cat(::Val{n}) where {n}
-    n <= 0 && throw(ArgumentError("cat dimension must be a positive integer, but got $n"))
-    ntuple(i -> (i == n), Val(n))
-end
-
+dims2cat(::Val{dims}) where dims = dims2cat(dims)
 function dims2cat(dims)
-    if any(dims .<= 0)
+    if any(≤(0), dims)
         throw(ArgumentError("All cat dimensions must be positive integers, but got $dims"))
     end
     ntuple(in(dims), maximum(dims))
 end
 
-_cat(dims, X...) = cat_t(promote_eltypeof(X...), X...; dims=dims)
+_cat(dims, X...) = _cat_t(dims, promote_eltypeof(X...), X...)
 
-@inline cat_t(::Type{T}, X...; dims) where {T} = _cat_t(dims, T, X...)
 @inline function _cat_t(dims, ::Type{T}, X...) where {T}
     catdims = dims2cat(dims)
     shape = cat_size_shape(catdims, X...)
@@ -1715,6 +1755,9 @@ _cat(dims, X...) = cat_t(promote_eltypeof(X...), X...; dims=dims)
     end
     return __cat(A, shape, catdims, X...)
 end
+# this version of `cat_t` is not very kind for inference and so its usage should be avoided,
+# nevertheless it is here just for compat after https://github.com/JuliaLang/julia/pull/45028
+@inline cat_t(::Type{T}, X...; dims) where {T} = _cat_t(dims, T, X...)
 
 # Why isn't this called `__cat!`?
 __cat(A, shape, catdims, X...) = __cat_offset!(A, shape, catdims, ntuple(zero, length(shape)), X...)
@@ -1744,7 +1787,8 @@ end
 """
     vcat(A...)
 
-Concatenate along dimension 1.
+Concatenate along dimension 1. To efficiently concatenate a large vector of arrays,
+use `reduce(vcat, x)`.
 
 # Examples
 ```jldoctest
@@ -1770,13 +1814,29 @@ julia> vcat(c...)
 2×3 Matrix{Int64}:
  1  2  3
  4  5  6
+
+julia> vs = [[1, 2], [3, 4], [5, 6]]
+3-element Vector{Vector{Int64}}:
+ [1, 2]
+ [3, 4]
+ [5, 6]
+
+julia> reduce(vcat, vs)
+6-element Vector{Int64}:
+ 1
+ 2
+ 3
+ 4
+ 5
+ 6
 ```
 """
 vcat(X...) = cat(X...; dims=Val(1))
 """
     hcat(A...)
 
-Concatenate along dimension 2.
+Concatenate along dimension 2. To efficiently concatenate a large vector of arrays,
+use `reduce(hcat, x)`.
 
 # Examples
 ```jldoctest
@@ -1821,12 +1881,23 @@ julia> hcat(x, [1; 2; 3])
  1
  2
  3
+
+julia> vs = [[1, 2], [3, 4], [5, 6]]
+3-element Vector{Vector{Int64}}:
+ [1, 2]
+ [3, 4]
+ [5, 6]
+
+julia> reduce(hcat, vs)
+2×3 Matrix{Int64}:
+ 1  3  5
+ 2  4  6
 ```
 """
 hcat(X...) = cat(X...; dims=Val(2))
 
-typed_vcat(::Type{T}, X...) where T = cat_t(T, X...; dims=Val(1))
-typed_hcat(::Type{T}, X...) where T = cat_t(T, X...; dims=Val(2))
+typed_vcat(::Type{T}, X...) where T = _cat_t(Val(1), T, X...)
+typed_hcat(::Type{T}, X...) where T = _cat_t(Val(2), T, X...)
 
 """
     cat(A...; dims)
@@ -1862,7 +1933,8 @@ julia> cat(true, trues(2,2), trues(4)', dims=(1,2))
 ```
 """
 @inline cat(A...; dims) = _cat(dims, A...)
-_cat(catdims, A::AbstractArray{T}...) where {T} = cat_t(T, A...; dims=catdims)
+# `@constprop :aggressive` allows `catdims` to be propagated as constant improving return type inference
+@constprop :aggressive _cat(catdims, A::AbstractArray{T}...) where {T} = _cat_t(catdims, T, A...)
 
 # The specializations for 1 and 2 inputs are important
 # especially when running with --inline=no, see #11158
@@ -1873,12 +1945,12 @@ hcat(A::AbstractArray) = cat(A; dims=Val(2))
 hcat(A::AbstractArray, B::AbstractArray) = cat(A, B; dims=Val(2))
 hcat(A::AbstractArray...) = cat(A...; dims=Val(2))
 
-typed_vcat(T::Type, A::AbstractArray) = cat_t(T, A; dims=Val(1))
-typed_vcat(T::Type, A::AbstractArray, B::AbstractArray) = cat_t(T, A, B; dims=Val(1))
-typed_vcat(T::Type, A::AbstractArray...) = cat_t(T, A...; dims=Val(1))
-typed_hcat(T::Type, A::AbstractArray) = cat_t(T, A; dims=Val(2))
-typed_hcat(T::Type, A::AbstractArray, B::AbstractArray) = cat_t(T, A, B; dims=Val(2))
-typed_hcat(T::Type, A::AbstractArray...) = cat_t(T, A...; dims=Val(2))
+typed_vcat(T::Type, A::AbstractArray) = _cat_t(Val(1), T, A)
+typed_vcat(T::Type, A::AbstractArray, B::AbstractArray) = _cat_t(Val(1), T, A, B)
+typed_vcat(T::Type, A::AbstractArray...) = _cat_t(Val(1), T, A...)
+typed_hcat(T::Type, A::AbstractArray) = _cat_t(Val(2), T, A)
+typed_hcat(T::Type, A::AbstractArray, B::AbstractArray) = _cat_t(Val(2), T, A, B)
+typed_hcat(T::Type, A::AbstractArray...) = _cat_t(Val(2), T, A...)
 
 # 2d horizontal and vertical concatenation
 
@@ -2111,7 +2183,9 @@ julia> hvncat(((3, 3), (3, 3), (6,)), true, a, b, c, d, e, f)
  4  5  6
 ```
 
+
 # Examples for construction of the arguments:
+```julia
 [a b c ; d e f ;;;
  g h i ; j k l ;;;
  m n o ; p q r ;;;
@@ -2128,30 +2202,145 @@ julia> hvncat(((3, 3), (3, 3), (6,)), true, a, b, c, d, e, f)
  _____________
  4             = elements in each 4d slice (4,)
  => shape = ((2, 1, 1), (3, 1), (4,), (4,)) with `rowfirst` = true
+```
 """
-hvncat(::Tuple{}, ::Bool) = []
-hvncat(::Tuple{}, ::Bool, xs...) = []
-hvncat(::Tuple{Vararg{Any, 1}}, ::Bool, xs...) = vcat(xs...) # methods assume 2+ dimensions
 hvncat(dimsshape::Tuple, row_first::Bool, xs...) = _hvncat(dimsshape, row_first, xs...)
 hvncat(dim::Int, xs...) = _hvncat(dim, true, xs...)
 
-_hvncat(::Union{Tuple, Int}, ::Bool) = []
+_hvncat(dimsshape::Union{Tuple, Int}, row_first::Bool) = _typed_hvncat(Any, dimsshape, row_first)
 _hvncat(dimsshape::Union{Tuple, Int}, row_first::Bool, xs...) = _typed_hvncat(promote_eltypeof(xs...), dimsshape, row_first, xs...)
 _hvncat(dimsshape::Union{Tuple, Int}, row_first::Bool, xs::T...) where T<:Number = _typed_hvncat(T, dimsshape, row_first, xs...)
 _hvncat(dimsshape::Union{Tuple, Int}, row_first::Bool, xs::Number...) = _typed_hvncat(promote_typeof(xs...), dimsshape, row_first, xs...)
 _hvncat(dimsshape::Union{Tuple, Int}, row_first::Bool, xs::AbstractArray...) = _typed_hvncat(promote_eltype(xs...), dimsshape, row_first, xs...)
 _hvncat(dimsshape::Union{Tuple, Int}, row_first::Bool, xs::AbstractArray{T}...) where T = _typed_hvncat(T, dimsshape, row_first, xs...)
 
-typed_hvncat(::Type{T}, ::Tuple{}, ::Bool) where T = Vector{T}()
-typed_hvncat(::Type{T}, ::Tuple{}, ::Bool, xs...) where T = Vector{T}()
-typed_hvncat(T::Type, ::Tuple{Vararg{Any, 1}}, ::Bool, xs...) = typed_vcat(T, xs...) # methods assume 2+ dimensions
+
 typed_hvncat(T::Type, dimsshape::Tuple, row_first::Bool, xs...) = _typed_hvncat(T, dimsshape, row_first, xs...)
 typed_hvncat(T::Type, dim::Int, xs...) = _typed_hvncat(T, Val(dim), xs...)
 
-_typed_hvncat(::Type{T}, ::Tuple{}, ::Bool) where T = Vector{T}()
-_typed_hvncat(::Type{T}, ::Tuple{}, ::Bool, xs...) where T = Vector{T}()
-_typed_hvncat(::Type{T}, ::Tuple{}, ::Bool, xs::Number...) where T = Vector{T}()
-function _typed_hvncat(::Type{T}, dims::Tuple{Vararg{Int, N}}, row_first::Bool, xs::Number...) where {T, N}
+# 1-dimensional hvncat methods
+
+_typed_hvncat(::Type, ::Val{0}) = _typed_hvncat_0d_only_one()
+_typed_hvncat(T::Type, ::Val{0}, x) = fill(convert(T, x))
+_typed_hvncat(T::Type, ::Val{0}, x::Number) = fill(convert(T, x))
+_typed_hvncat(T::Type, ::Val{0}, x::AbstractArray) = convert.(T, x)
+_typed_hvncat(::Type, ::Val{0}, ::Any...) = _typed_hvncat_0d_only_one()
+_typed_hvncat(::Type, ::Val{0}, ::Number...) = _typed_hvncat_0d_only_one()
+_typed_hvncat(::Type, ::Val{0}, ::AbstractArray...) = _typed_hvncat_0d_only_one()
+
+_typed_hvncat_0d_only_one() =
+    throw(ArgumentError("a 0-dimensional array may only contain exactly one element"))
+
+_typed_hvncat(T::Type, dim::Int, ::Bool, xs...) = _typed_hvncat(T, Val(dim), xs...) # catches from _hvncat type promoters
+
+function _typed_hvncat(::Type{T}, ::Val{N}) where {T, N}
+    N < 0 &&
+        throw(ArgumentError("concatenation dimension must be nonnegative"))
+    return Array{T, N}(undef, ntuple(x -> 0, Val(N)))
+end
+
+function _typed_hvncat(T::Type, ::Val{N}, xs::Number...) where N
+    N < 0 &&
+        throw(ArgumentError("concatenation dimension must be nonnegative"))
+    A = cat_similar(xs[1], T, (ntuple(x -> 1, Val(N - 1))..., length(xs)))
+    hvncat_fill!(A, false, xs)
+    return A
+end
+
+function _typed_hvncat(::Type{T}, ::Val{N}, as::AbstractArray...) where {T, N}
+    # optimization for arrays that can be concatenated by copying them linearly into the destination
+    # conditions: the elements must all have 1-length dimensions above N
+    length(as) > 0 ||
+        throw(ArgumentError("must have at least one element"))
+    N < 0 &&
+        throw(ArgumentError("concatenation dimension must be nonnegative"))
+    for a ∈ as
+        ndims(a) <= N || all(x -> size(a, x) == 1, (N + 1):ndims(a)) ||
+            return _typed_hvncat(T, (ntuple(x -> 1, Val(N - 1))..., length(as), 1), false, as...)
+            # the extra 1 is to avoid an infinite cycle
+    end
+
+    nd = N
+
+    Ndim = 0
+    for i ∈ eachindex(as)
+        Ndim += cat_size(as[i], N)
+        nd = max(nd, cat_ndims(as[i]))
+        for d ∈ 1:N - 1
+            cat_size(as[1], d) == cat_size(as[i], d) || throw(ArgumentError("mismatched size along axis $d in element $i"))
+        end
+    end
+
+    A = cat_similar(as[1], T, (ntuple(d -> size(as[1], d), N - 1)..., Ndim, ntuple(x -> 1, nd - N)...))
+    k = 1
+    for a ∈ as
+        for i ∈ eachindex(a)
+            A[k] = a[i]
+            k += 1
+        end
+    end
+    return A
+end
+
+function _typed_hvncat(::Type{T}, ::Val{N}, as...) where {T, N}
+    length(as) > 0 ||
+        throw(ArgumentError("must have at least one element"))
+    N < 0 &&
+        throw(ArgumentError("concatenation dimension must be nonnegative"))
+    nd = N
+    Ndim = 0
+    for i ∈ eachindex(as)
+        Ndim += cat_size(as[i], N)
+        nd = max(nd, cat_ndims(as[i]))
+        for d ∈ 1:N-1
+            cat_size(as[i], d) == 1 ||
+                throw(ArgumentError("all dimensions of element $i other than $N must be of length 1"))
+        end
+    end
+
+    A = Array{T, nd}(undef, ntuple(x -> 1, Val(N - 1))..., Ndim, ntuple(x -> 1, nd - N)...)
+
+    k = 1
+    for a ∈ as
+        if a isa AbstractArray
+            lena = length(a)
+            copyto!(A, k, a, 1, lena)
+            k += lena
+        else
+            A[k] = a
+            k += 1
+        end
+    end
+    return A
+end
+
+# 0-dimensional cases for balanced and unbalanced hvncat method
+
+_typed_hvncat(T::Type, ::Tuple{}, ::Bool, x...) = _typed_hvncat(T, Val(0), x...)
+_typed_hvncat(T::Type, ::Tuple{}, ::Bool, x::Number...) = _typed_hvncat(T, Val(0), x...)
+
+
+# balanced dimensions hvncat methods
+
+_typed_hvncat(T::Type, dims::Tuple{Int}, ::Bool, as...) = _typed_hvncat_1d(T, dims[1], Val(false), as...)
+_typed_hvncat(T::Type, dims::Tuple{Int}, ::Bool, as::Number...) = _typed_hvncat_1d(T, dims[1], Val(false), as...)
+
+function _typed_hvncat_1d(::Type{T}, ds::Int, ::Val{row_first}, as...) where {T, row_first}
+    lengthas = length(as)
+    ds > 0 ||
+        throw(ArgumentError("`dimsshape` argument must consist of positive integers"))
+    lengthas == ds ||
+        throw(ArgumentError("number of elements does not match `dimshape` argument; expected $ds, got $lengthas"))
+    if row_first
+        return _typed_hvncat(T, Val(2), as...)
+    else
+        return _typed_hvncat(T, Val(1), as...)
+    end
+end
+
+function _typed_hvncat(::Type{T}, dims::NTuple{N, Int}, row_first::Bool, xs::Number...) where {T, N}
+    all(>(0), dims) ||
+        throw(ArgumentError("`dims` argument must contain positive integers"))
     A = Array{T, N}(undef, dims...)
     lengtha = length(A)  # Necessary to store result because throw blocks are being deoptimized right now, which leads to excessive allocations
     lengthx = length(xs) # Cuts from 3 allocations to 1.
@@ -2187,92 +2376,62 @@ function hvncat_fill!(A::Array, row_first::Bool, xs::Tuple)
     end
 end
 
-_typed_hvncat(T::Type, dim::Int, ::Bool, xs...) = _typed_hvncat(T, Val(dim), xs...) # catches from _hvncat type promoters
-_typed_hvncat(::Type{T}, ::Val) where T = Vector{T}()
-_typed_hvncat(T::Type, ::Val{N}, xs::Number...) where N = _typed_hvncat(T, (ntuple(x -> 1, N - 1)..., length(xs)), false, xs...)
-function _typed_hvncat(::Type{T}, ::Val{N}, as::AbstractArray...) where {T, N}
-    # optimization for arrays that can be concatenated by copying them linearly into the destination
-    # conditions: the elements must all have 1- or 0-length dimensions above N
-    for a ∈ as
-        ndims(a) <= N || all(x -> size(a, x) == 1, (N + 1):ndims(a)) ||
-            return _typed_hvncat(T, (ntuple(x -> 1, N - 1)..., length(as)), false, as...)
-    end
-
-    nd = max(N, ndims(as[1]))
-
-    Ndim = 0
-    for i ∈ 1:lastindex(as)
-        Ndim += cat_size(as[i], N)
-        for d ∈ 1:N - 1
-            cat_size(as[1], d) == cat_size(as[i], d) || throw(ArgumentError("mismatched size along axis $d in element $i"))
-        end
-    end
-
-    A = cat_similar(as[1], T, (ntuple(d -> size(as[1], d), N - 1)..., Ndim, ntuple(x -> 1, nd - N)...))
-    k = 1
-    for a ∈ as
-        for i ∈ eachindex(a)
-            A[k] = a[i]
-            k += 1
-        end
-    end
-    return A
+function _typed_hvncat(T::Type, dims::NTuple{N, Int}, row_first::Bool, as...) where {N}
+    # function barrier after calculating the max is necessary for high performance
+    nd = max(maximum(cat_ndims(a) for a ∈ as), N)
+    return _typed_hvncat_dims(T, (dims..., ntuple(x -> 1, nd - N)...), row_first, as)
 end
 
-function _typed_hvncat(::Type{T}, ::Val{N}, as...) where {T, N}
-    # optimization for scalars and 1-length arrays that can be concatenated by copying them linearly
-    # into the destination
-    nd = N
-    Ndim = 0
-    for a ∈ as
-        if a isa AbstractArray
-            cat_size(a, N) == length(a) ||
-                throw(ArgumentError("all dimensions of elements other than $N must be of length 1"))
-            nd = max(nd, cat_ndims(a))
-        end
-        Ndim += cat_size(a, N)
-    end
+function _typed_hvncat_dims(::Type{T}, dims::NTuple{N, Int}, row_first::Bool, as::Tuple) where {T, N}
+    length(as) > 0 ||
+        throw(ArgumentError("must have at least one element"))
+    all(>(0), dims) ||
+        throw(ArgumentError("`dims` argument must contain positive integers"))
 
-    A = Array{T, nd}(undef, ntuple(x -> 1, N - 1)..., Ndim, ntuple(x -> 1, nd - N)...)
-
-    k = 1
-    for a ∈ as
-        if a isa AbstractArray
-            lena = length(a)
-            copyto!(A, k, a, 1, lena)
-            k += lena
-        else
-            A[k] = a
-            k += 1
-        end
-    end
-    return A
-end
-
-function _typed_hvncat(::Type{T}, dims::Tuple{Vararg{Int, N}}, row_first::Bool, as...) where {T, N}
     d1 = row_first ? 2 : 1
     d2 = row_first ? 1 : 2
 
-    # discover dimensions
-    nd = max(N, cat_ndims(as[1]))
-    outdims = zeros(Int, nd)
+    outdims = zeros(Int, N)
+
+    # validate shapes for lowest level of concatenation
+    d = findfirst(>(1), dims)
+    if d !== nothing # all dims are 1
+        if row_first && d < 3
+            d = d == 1 ? 2 : 1
+        end
+        nblocks = length(as) ÷ dims[d]
+        for b ∈ 1:nblocks
+            offset = ((b - 1) * dims[d])
+            startelementi = offset + 1
+            for i ∈ offset .+ (2:dims[d])
+                for dd ∈ 1:N
+                    dd == d && continue
+                    if cat_size(as[startelementi], dd) != cat_size(as[i], dd)
+                        throw(ArgumentError("incompatible shape in element $i"))
+                    end
+                end
+            end
+        end
+    end
 
     # discover number of rows or columns
     for i ∈ 1:dims[d1]
         outdims[d1] += cat_size(as[i], d1)
     end
 
-    currentdims = zeros(Int, nd)
+    currentdims = zeros(Int, N)
     blockcount = 0
+    elementcount = 0
     for i ∈ eachindex(as)
+        elementcount += cat_length(as[i])
         currentdims[d1] += cat_size(as[i], d1)
         if currentdims[d1] == outdims[d1]
             currentdims[d1] = 0
-            for d ∈ (d2, 3:nd...)
+            for d ∈ (d2, 3:N...)
                 currentdims[d] += cat_size(as[i], d)
                 if outdims[d] == 0 # unfixed dimension
                     blockcount += 1
-                    if blockcount == (d > length(dims) ? 1 : dims[d]) # last expected member of dimension
+                    if blockcount == dims[d]
                         outdims[d] = currentdims[d]
                         currentdims[d] = 0
                         blockcount = 0
@@ -2294,14 +2453,9 @@ function _typed_hvncat(::Type{T}, dims::Tuple{Vararg{Int, N}}, row_first::Bool, 
         end
     end
 
-    # calling sum() leads to 3 extra allocations
-    len = 0
-    for a ∈ as
-        len += cat_length(a)
-    end
     outlen = prod(outdims)
-    outlen == 0 && ArgumentError("too few elements in arguments, unable to infer dimensions") |> throw
-    len == outlen || ArgumentError("too many elements in arguments; expected $(outlen), got $(len)") |> throw
+    elementcount == outlen ||
+        throw(ArgumentError("mismatched number of elements; expected $(outlen), got $(elementcount)"))
 
     # copy into final array
     A = cat_similar(as[1], T, outdims)
@@ -2311,22 +2465,48 @@ function _typed_hvncat(::Type{T}, dims::Tuple{Vararg{Int, N}}, row_first::Bool, 
     return A
 end
 
-function _typed_hvncat(::Type{T}, shape::Tuple{Vararg{Tuple, N}}, row_first::Bool, as...) where {T, N}
+
+# unbalanced dimensions hvncat methods
+
+function _typed_hvncat(T::Type, shape::Tuple{Tuple}, row_first::Bool, xs...)
+    length(shape[1]) > 0 ||
+        throw(ArgumentError("each level of `shape` argument must have at least one value"))
+    return _typed_hvncat_1d(T, shape[1][1], Val(row_first), xs...)
+end
+
+function _typed_hvncat(T::Type, shape::NTuple{N, Tuple}, row_first::Bool, as...) where {N}
+    # function barrier after calculating the max is necessary for high performance
+    nd = max(maximum(cat_ndims(a) for a ∈ as), N)
+    return _typed_hvncat_shape(T, (shape..., ntuple(x -> shape[end], nd - N)...), row_first, as)
+end
+
+function _typed_hvncat_shape(::Type{T}, shape::NTuple{N, Tuple}, row_first, as::Tuple) where {T, N}
+    length(as) > 0 ||
+        throw(ArgumentError("must have at least one element"))
+    all(>(0), tuple((shape...)...)) ||
+        throw(ArgumentError("`shape` argument must consist of positive integers"))
+
     d1 = row_first ? 2 : 1
     d2 = row_first ? 1 : 2
-    shape = collect(shape) # saves allocations later
-    shapelength = shape[end][1]
+
+    shapev = collect(shape) # saves allocations later
+    all(!isempty, shapev) ||
+        throw(ArgumentError("each level of `shape` argument must have at least one value"))
+    length(shapev[end]) == 1 ||
+        throw(ArgumentError("last level of shape must contain only one integer"))
+    shapelength = shapev[end][1]
     lengthas = length(as)
     shapelength == lengthas || throw(ArgumentError("number of elements does not match shape; expected $(shapelength), got $lengthas)"))
-
     # discover dimensions
     nd = max(N, cat_ndims(as[1]))
-    outdims = zeros(Int, nd)
+    outdims = fill(-1, nd)
     currentdims = zeros(Int, nd)
     blockcounts = zeros(Int, nd)
     shapepos = ones(Int, nd)
 
+    elementcount = 0
     for i ∈ eachindex(as)
+        elementcount += cat_length(as[i])
         wasstartblock = false
         for d ∈ 1:N
             ad = (d < 3 && row_first) ? (d == 1 ? 2 : 1) : d
@@ -2336,26 +2516,33 @@ function _typed_hvncat(::Type{T}, shape::Tuple{Vararg{Tuple, N}}, row_first::Boo
             if d == 1 || i == 1 || wasstartblock
                 currentdims[d] += dsize
             elseif dsize != cat_size(as[i - 1], ad)
-                throw(ArgumentError("""argument $i has a mismatched number of elements along axis $ad; \
-                                    expected $(cat_size(as[i - 1], ad)), got $dsize"""))
+                throw(ArgumentError("argument $i has a mismatched number of elements along axis $ad; \
+                                    expected $(cat_size(as[i - 1], ad)), got $dsize"))
             end
 
             wasstartblock = blockcounts[d] == 1 # remember for next dimension
 
-            isendblock = blockcounts[d] == shape[d][shapepos[d]]
+            isendblock = blockcounts[d] == shapev[d][shapepos[d]]
             if isendblock
-                if outdims[d] == 0
+                if outdims[d] == -1
                     outdims[d] = currentdims[d]
                 elseif outdims[d] != currentdims[d]
-                    throw(ArgumentError("""argument $i has a mismatched number of elements along axis $ad; \
-                                        expected $(abs(outdims[d] - (currentdims[d] - dsize))), got $dsize"""))
+                    throw(ArgumentError("argument $i has a mismatched number of elements along axis $ad; \
+                                        expected $(abs(outdims[d] - (currentdims[d] - dsize))), got $dsize"))
                 end
                 currentdims[d] = 0
                 blockcounts[d] = 0
                 shapepos[d] += 1
+                d > 1 && (blockcounts[d - 1] == 0 ||
+                    throw(ArgumentError("shape in level $d is inconsistent; level counts must nest \
+                                        evenly into each other")))
             end
         end
     end
+
+    outlen = prod(outdims)
+    elementcount == outlen ||
+        throw(ArgumentError("mismatched number of elements; expected $(outlen), got $(elementcount)"))
 
     if row_first
         outdims[1], outdims[2] = outdims[2], outdims[1]
@@ -2462,12 +2649,12 @@ end
 # _sub2ind and _ind2sub
 # fallbacks
 function _sub2ind(A::AbstractArray, I...)
-    @_inline_meta
+    @inline
     _sub2ind(axes(A), I...)
 end
 
 function _ind2sub(A::AbstractArray, ind)
-    @_inline_meta
+    @inline
     _ind2sub(axes(A), ind)
 end
 
@@ -2475,49 +2662,49 @@ end
 _sub2ind(::Tuple{}) = 1
 _sub2ind(::DimsInteger) = 1
 _sub2ind(::Indices) = 1
-_sub2ind(::Tuple{}, I::Integer...) = (@_inline_meta; _sub2ind_recurse((), 1, 1, I...))
+_sub2ind(::Tuple{}, I::Integer...) = (@inline; _sub2ind_recurse((), 1, 1, I...))
 
 # Generic cases
-_sub2ind(dims::DimsInteger, I::Integer...) = (@_inline_meta; _sub2ind_recurse(dims, 1, 1, I...))
-_sub2ind(inds::Indices, I::Integer...) = (@_inline_meta; _sub2ind_recurse(inds, 1, 1, I...))
+_sub2ind(dims::DimsInteger, I::Integer...) = (@inline; _sub2ind_recurse(dims, 1, 1, I...))
+_sub2ind(inds::Indices, I::Integer...) = (@inline; _sub2ind_recurse(inds, 1, 1, I...))
 # In 1d, there's a question of whether we're doing cartesian indexing
 # or linear indexing. Support only the former.
 _sub2ind(inds::Indices{1}, I::Integer...) =
     throw(ArgumentError("Linear indexing is not defined for one-dimensional arrays"))
-_sub2ind(inds::Tuple{OneTo}, I::Integer...) = (@_inline_meta; _sub2ind_recurse(inds, 1, 1, I...)) # only OneTo is safe
+_sub2ind(inds::Tuple{OneTo}, I::Integer...) = (@inline; _sub2ind_recurse(inds, 1, 1, I...)) # only OneTo is safe
 _sub2ind(inds::Tuple{OneTo}, i::Integer)    = i
 
 _sub2ind_recurse(::Any, L, ind) = ind
 function _sub2ind_recurse(::Tuple{}, L, ind, i::Integer, I::Integer...)
-    @_inline_meta
+    @inline
     _sub2ind_recurse((), L, ind+(i-1)*L, I...)
 end
 function _sub2ind_recurse(inds, L, ind, i::Integer, I::Integer...)
-    @_inline_meta
+    @inline
     r1 = inds[1]
     _sub2ind_recurse(tail(inds), nextL(L, r1), ind+offsetin(i, r1)*L, I...)
 end
 
 nextL(L, l::Integer) = L*l
-nextL(L, r::AbstractUnitRange) = L*unsafe_length(r)
-nextL(L, r::Slice) = L*unsafe_length(r.indices)
+nextL(L, r::AbstractUnitRange) = L*length(r)
+nextL(L, r::Slice) = L*length(r.indices)
 offsetin(i, l::Integer) = i-1
 offsetin(i, r::AbstractUnitRange) = i-first(r)
 
-_ind2sub(::Tuple{}, ind::Integer) = (@_inline_meta; ind == 1 ? () : throw(BoundsError()))
-_ind2sub(dims::DimsInteger, ind::Integer) = (@_inline_meta; _ind2sub_recurse(dims, ind-1))
-_ind2sub(inds::Indices, ind::Integer)     = (@_inline_meta; _ind2sub_recurse(inds, ind-1))
+_ind2sub(::Tuple{}, ind::Integer) = (@inline; ind == 1 ? () : throw(BoundsError()))
+_ind2sub(dims::DimsInteger, ind::Integer) = (@inline; _ind2sub_recurse(dims, ind-1))
+_ind2sub(inds::Indices, ind::Integer)     = (@inline; _ind2sub_recurse(inds, ind-1))
 _ind2sub(inds::Indices{1}, ind::Integer) =
     throw(ArgumentError("Linear indexing is not defined for one-dimensional arrays"))
 _ind2sub(inds::Tuple{OneTo}, ind::Integer) = (ind,)
 
 _ind2sub_recurse(::Tuple{}, ind) = (ind+1,)
 function _ind2sub_recurse(indslast::NTuple{1}, ind)
-    @_inline_meta
+    @inline
     (_lookup(ind, indslast[1]),)
 end
 function _ind2sub_recurse(inds, ind)
-    @_inline_meta
+    @inline
     r1 = inds[1]
     indnext, f, l = _div(ind, r1)
     (ind-l*indnext+f, _ind2sub_recurse(tail(inds), indnext)...)
@@ -2526,7 +2713,7 @@ end
 _lookup(ind, d::Integer) = ind+1
 _lookup(ind, r::AbstractUnitRange) = ind+first(r)
 _div(ind, d::Integer) = div(ind, d), 1, d
-_div(ind, r::AbstractUnitRange) = (d = unsafe_length(r); (div(ind, d), first(r), d))
+_div(ind, r::AbstractUnitRange) = (d = length(r); (div(ind, d), first(r), d))
 
 # Vectorized forms
 function _sub2ind(inds::Indices{1}, I1::AbstractVector{T}, I::AbstractVector{T}...) where T<:Integer
@@ -2548,7 +2735,7 @@ function _sub2ind_vecs(inds, I::AbstractVector...)
 end
 
 function _sub2ind!(Iout, inds, Iinds, I)
-    @_noinline_meta
+    @noinline
     for i in Iinds
         # Iout[i] = _sub2ind(inds, map(Ij -> Ij[i], I)...)
         Iout[i] = sub2ind_vec(inds, i, I)
@@ -2556,8 +2743,8 @@ function _sub2ind!(Iout, inds, Iinds, I)
     Iout
 end
 
-sub2ind_vec(inds, i, I) = (@_inline_meta; _sub2ind(inds, _sub2ind_vec(i, I...)...))
-_sub2ind_vec(i, I1, I...) = (@_inline_meta; (I1[i], _sub2ind_vec(i, I...)...))
+sub2ind_vec(inds, i, I) = (@inline; _sub2ind(inds, _sub2ind_vec(i, I...)...))
+_sub2ind_vec(i, I1, I...) = (@inline; (I1[i], _sub2ind_vec(i, I...)...))
 _sub2ind_vec(i) = ()
 
 function _ind2sub(inds::Union{DimsInteger{N},Indices{N}}, ind::AbstractVector{<:Integer}) where N
@@ -2614,72 +2801,122 @@ foreach(f, itrs...) = (for z in zip(itrs...); f(z...); end; nothing)
 """
     mapslices(f, A; dims)
 
-Transform the given dimensions of array `A` using function `f`. `f` is called on each slice
-of `A` of the form `A[...,:,...,:,...]`. `dims` is an integer vector specifying where the
-colons go in this expression. The results are concatenated along the remaining dimensions.
-For example, if `dims` is `[1,2]` and `A` is 4-dimensional, `f` is called on `A[:,:,i,j]`
-for all `i` and `j`.
+Transform the given dimensions of array `A` by applying a function `f` on each slice
+of the form `A[..., :, ..., :, ...]`, with a colon at each `d` in `dims`. The results are
+concatenated along the remaining dimensions.
 
-See also [`eachcol`](@ref), [`eachslice`](@ref).
+For example, if `dims = [1,2]` and `A` is 4-dimensional, then `f` is called on `x = A[:,:,i,j]`
+for all `i` and `j`, and `f(x)` becomes `R[:,:,i,j]` in the result `R`.
+
+See also [`eachcol`](@ref), [`eachslice`](@ref), [`mapreduce`](@ref).
 
 # Examples
 ```jldoctest
-julia> a = reshape(Vector(1:16),(2,2,2,2))
-2×2×2×2 Array{Int64, 4}:
-[:, :, 1, 1] =
- 1  3
- 2  4
+julia> A = reshape(1:30,(2,5,3))
+2×5×3 reshape(::UnitRange{$Int}, 2, 5, 3) with eltype $Int:
+[:, :, 1] =
+ 1  3  5  7   9
+ 2  4  6  8  10
 
-[:, :, 2, 1] =
- 5  7
- 6  8
+[:, :, 2] =
+ 11  13  15  17  19
+ 12  14  16  18  20
 
-[:, :, 1, 2] =
-  9  11
- 10  12
+[:, :, 3] =
+ 21  23  25  27  29
+ 22  24  26  28  30
 
-[:, :, 2, 2] =
- 13  15
- 14  16
+julia> f(x::Matrix) = fill(x[1,1], 1,4);  # returns a 1×4 matrix
 
-julia> mapslices(sum, a, dims = [1,2])
-1×1×2×2 Array{Int64, 4}:
-[:, :, 1, 1] =
- 10
+julia> mapslices(f, A, dims=(1,2))
+1×4×3 Array{$Int, 3}:
+[:, :, 1] =
+ 1  1  1  1
 
-[:, :, 2, 1] =
- 26
+[:, :, 2] =
+ 11  11  11  11
 
-[:, :, 1, 2] =
- 42
+[:, :, 3] =
+ 21  21  21  21
 
-[:, :, 2, 2] =
- 58
+julia> g(x) = x[begin] // x[end-1];  # returns a number
+
+julia> mapslices(g, A, dims=[1,3])
+1×5×1 Array{Rational{$Int}, 3}:
+[:, :, 1] =
+ 1//21  3//23  1//5  7//27  9//29
+
+julia> map(g, eachslice(A, dims=2))
+5-element Vector{Rational{$Int}}:
+ 1//21
+ 3//23
+ 1//5
+ 7//27
+ 9//29
+
+julia> mapslices(sum, A; dims=(1,3)) == sum(A; dims=(1,3))
+true
 ```
+
+Notice that in `eachslice(A; dims=2)`, the specified dimension is the
+one *without* a colon in the slice. This is `view(A,:,i,:)`, whereas
+`mapslices(f, A; dims=(1,3))` uses `A[:,i,:]`. The function `f` may mutate
+values in the slice without affecting `A`.
 """
 function mapslices(f, A::AbstractArray; dims)
-    if isempty(dims)
-        return map(f,A)
-    end
-    if !isa(dims, AbstractVector)
-        dims = [dims...]
-    end
+    isempty(dims) && return map(f, A)
 
-    dimsA = [axes(A)...]
-    ndimsA = ndims(A)
-    alldims = [1:ndimsA;]
-
-    otherdims = setdiff(alldims, dims)
-
-    idx = Any[first(ind) for ind in axes(A)]
-    itershape   = tuple(dimsA[otherdims]...)
     for d in dims
-        idx[d] = Slice(axes(A, d))
+        d isa Integer || throw(ArgumentError("mapslices: dimension must be an integer, got $d"))
+        d >= 1 || throw(ArgumentError("mapslices: dimension must be ≥ 1, got $d"))
+        # Indexing a matrix M[:,1,:] produces a 1-column matrix, but dims=(1,3) here
+        # would otherwise ignore 3, and slice M[:,i]. Previously this gave error:
+        # BoundsError: attempt to access 2-element Vector{Any} at index [3]
+        d > ndims(A) && throw(ArgumentError("mapslices does not accept dimensions > ndims(A) = $(ndims(A)), got $d"))
     end
+    dim_mask = ntuple(d -> d in dims, ndims(A))
 
     # Apply the function to the first slice in order to determine the next steps
-    Aslice = A[idx...]
+    idx1 = ntuple(d -> d in dims ? (:) : firstindex(A,d), ndims(A))
+    Aslice = A[idx1...]
     r1 = f(Aslice)
+
+    res1 = if r1 isa AbstractArray && ndims(r1) > 0
+        n = sum(dim_mask)
+        if ndims(r1) > n && any(ntuple(d -> size(r1,d+n)>1, ndims(r1)-n))
+            s = size(r1)[1:n]
+            throw(DimensionMismatch("mapslices cannot assign slice f(x) of size $(size(r1)) into output of size $s"))
+        end
+        r1
+    else
+        # If the result of f on a single slice is a scalar then we add singleton
+        # dimensions. When adding the dimensions, we have to respect the
+        # index type of the input array (e.g. in the case of OffsetArrays)
+        _res1 = similar(Aslice, typeof(r1), reduced_indices(Aslice, 1:ndims(Aslice)))
+        _res1[begin] = r1
+        _res1
+    end
+
+    # Determine result size and allocate. We always pad ndims(res1) out to length(dims):
+    din = Ref(0)
+    Rsize = ntuple(ndims(A)) do d
+        if d in dims
+            axes(res1, din[] += 1)
+        else
+            axes(A,d)
+        end
+    end
+    R = similar(res1, Rsize)
+
+    # Determine iteration space. It will be convenient in the loop to mask N-dimensional
+    # CartesianIndices, with some trivial dimensions:
+    itershape = ntuple(d -> d in dims ? Base.OneTo(1) : axes(A,d), ndims(A))
+    indices = Iterators.drop(CartesianIndices(itershape), 1)
+
+    # That skips the first element, which we already have:
+    ridx = ntuple(d -> d in dims ? Slice(axes(R,d)) : firstindex(A,d), ndims(A))
+    concatenate_setindex!(R, res1, ridx...)
+
     # In some cases, we can re-use the first slice for a dramatic performance
     # increase. The slice itself must be mutable and the result cannot contain
     # any mutable containers. The following errs on the side of being overly
@@ -2687,60 +2924,34 @@ function mapslices(f, A::AbstractArray; dims)
     safe_for_reuse = isa(Aslice, StridedArray) &&
                      (isa(r1, Number) || (isa(r1, AbstractArray) && eltype(r1) <: Number))
 
-    # determine result size and allocate
-    Rsize = copy(dimsA)
-    # TODO: maybe support removing dimensions
-    if !isa(r1, AbstractArray) || ndims(r1) == 0
-        # If the result of f on a single slice is a scalar then we add singleton
-        # dimensions. When adding the dimensions, we have to respect the
-        # index type of the input array (e.g. in the case of OffsetArrays)
-        tmp = similar(Aslice, typeof(r1), reduced_indices(Aslice, 1:ndims(Aslice)))
-        tmp[firstindex(tmp)] = r1
-        r1 = tmp
-    end
-    nextra = max(0, length(dims)-ndims(r1))
-    if eltype(Rsize) == Int
-        Rsize[dims] = [size(r1)..., ntuple(Returns(1), nextra)...]
-    else
-        Rsize[dims] = [axes(r1)..., ntuple(Returns(OneTo(1)), nextra)...]
-    end
-    R = similar(r1, tuple(Rsize...,))
-
-    ridx = Any[map(first, axes(R))...]
-    for d in dims
-        ridx[d] = axes(R,d)
-    end
-
-    concatenate_setindex!(R, r1, ridx...)
-
-    nidx = length(otherdims)
-    indices = Iterators.drop(CartesianIndices(itershape), 1) # skip the first element, we already handled it
-    inner_mapslices!(safe_for_reuse, indices, nidx, idx, otherdims, ridx, Aslice, A, f, R)
+    _inner_mapslices!(R, indices, f, A, dim_mask, Aslice, safe_for_reuse)
+    return R
 end
 
-@noinline function inner_mapslices!(safe_for_reuse, indices, nidx, idx, otherdims, ridx, Aslice, A, f, R)
+@noinline function _inner_mapslices!(R, indices, f, A, dim_mask, Aslice, safe_for_reuse)
+    must_extend = any(dim_mask .& size(R) .> 1)
     if safe_for_reuse
         # when f returns an array, R[ridx...] = f(Aslice) line copies elements,
         # so we can reuse Aslice
         for I in indices
-            replace_tuples!(nidx, idx, ridx, otherdims, I)
+            idx = ifelse.(dim_mask, Slice.(axes(A)), Tuple(I))
             _unsafe_getindex!(Aslice, A, idx...)
-            concatenate_setindex!(R, f(Aslice), ridx...)
+            r = f(Aslice)
+            if r isa AbstractArray || must_extend
+                ridx = ifelse.(dim_mask, Slice.(axes(R)), Tuple(I))
+                R[ridx...] = r
+            else
+                ridx = ifelse.(dim_mask, first.(axes(R)), Tuple(I))
+                R[ridx...] = r
+            end
         end
     else
         # we can't guarantee safety (#18524), so allocate new storage for each slice
         for I in indices
-            replace_tuples!(nidx, idx, ridx, otherdims, I)
+            idx = ifelse.(dim_mask, Slice.(axes(A)), Tuple(I))
+            ridx = ifelse.(dim_mask, Slice.(axes(R)), Tuple(I))
             concatenate_setindex!(R, f(A[idx...]), ridx...)
         end
-    end
-
-    return R
-end
-
-function replace_tuples!(nidx, idx, ridx, otherdims, I)
-    for i in 1:nidx
-        idx[otherdims[i]] = ridx[otherdims[i]] = I.I[i]
     end
 end
 
@@ -2979,29 +3190,9 @@ end
 
 ## keepat! ##
 
-"""
-    keepat!(a::AbstractVector, inds)
+# NOTE: since these use `@inbounds`, they are actually only intended for Vector and BitVector
 
-Remove the items at all the indices which are not given by `inds`,
-and return the modified `a`.
-Items which are kept are shifted to fill the resulting gaps.
-
-`inds` must be an iterator of sorted and unique integer indices.
-See also [`deleteat!`](@ref).
-
-!!! compat "Julia 1.7"
-    This function is available as of Julia 1.7.
-
-# Examples
-```jldoctest
-julia> keepat!([6, 5, 4, 3, 2, 1], 1:2:5)
-3-element Vector{Int64}:
- 6
- 4
- 2
-```
-"""
-function keepat!(a::AbstractVector, inds)
+function _keepat!(a::AbstractVector, inds)
     local prev
     i = firstindex(a)
     for k in inds
@@ -3016,5 +3207,31 @@ function keepat!(a::AbstractVector, inds)
         i = nextind(a, i)
     end
     deleteat!(a, i:lastindex(a))
+    return a
+end
+
+function _keepat!(a::AbstractVector, m::AbstractVector{Bool})
+    length(m) == length(a) || throw(BoundsError(a, m))
+    j = firstindex(a)
+    for i in eachindex(a, m)
+        @inbounds begin
+            if m[i]
+                i == j || (a[j] = a[i])
+                j = nextind(a, j)
+            end
+        end
+    end
+    deleteat!(a, j:lastindex(a))
+end
+
+## 1-d circshift ##
+function circshift!(a::AbstractVector, shift::Integer)
+    n = length(a)
+    n == 0 && return
+    shift = mod(shift, n)
+    shift == 0 && return
+    reverse!(a, 1, shift)
+    reverse!(a, shift+1, length(a))
+    reverse!(a)
     return a
 end

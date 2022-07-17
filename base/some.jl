@@ -65,7 +65,7 @@ Return `true` if `x === nothing`, and return `false` if not.
 !!! compat "Julia 1.1"
     This function requires at least Julia 1.1.
 
-See also [`something`](@ref), [`notnothing`](@ref), [`ismissing`](@ref).
+See also [`something`](@ref), [`Base.notnothing`](@ref), [`ismissing`](@ref).
 """
 isnothing(x) = x === nothing
 
@@ -138,8 +138,8 @@ true
 macro something(args...)
     expr = :(nothing)
     for arg in reverse(args)
-        expr = :((val = $arg) !== nothing ? val : $expr)
+        expr = :(val = $(esc(arg)); val !== nothing ? val : ($expr))
     end
-    return esc(:(something(let val; $expr; end)))
+    something = GlobalRef(Base, :something)
+    return :($something($expr))
 end
-
